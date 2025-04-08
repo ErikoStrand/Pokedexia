@@ -41,7 +41,7 @@
 				{/each}
 			</select>
 		</div>
-		<button on:click={resetFilters}>Reset</button>
+		<button onclick={resetFilters}>Reset</button>
 	</div>
 </div>
 
