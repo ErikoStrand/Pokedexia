@@ -1,49 +1,256 @@
 <!-- src/lib/components/PokemonCard.svelte -->
 <script>
-	// ... (keep existing script content: import, props, derived vars, handleImageError)
 	import { typeColors } from '$lib/pokemonUtils'; // Use your correct import path
+	// Import the updated store
+	import { prefetchedPokemon } from '$lib/stores.js';
 
 	let { pokemon } = $props();
 	let primaryType = $derived(pokemon.types[0] || 'normal');
 	let primaryColor = $derived(typeColors[primaryType] || '#A8A77A');
+
+	// Derive the prefetch status for *this specific* pokemon
+	let prefetchState = $derived(
+		$prefetchedPokemon.get(pokemon.name.toLowerCase()) || { status: 'idle' }
+	);
+
 	function handleImageError(event) {
-		/* ... */
+		/* ... (keep existing function) ... */
 	}
 </script>
 
 <!-- Wrap card content in an anchor tag -->
 <a href="/pokemon/{pokemon.name}" class="card-link">
-	<div class="pokemon-card" style="border-color: {primaryColor};">
-		<div class="pokemon-id-badge">
-			#{String(pokemon.id).padStart(3, '0')}
+	<!-- Add relative positioning to the card for the overlay -->
+	<div class="pokemon-card" style="border-color: {primaryColor}; position: relative;">
+		<!-- Main Card Content (slightly dimmed when loading/error) -->
+		<div
+			class="card-content"
+			class:overlay-active={prefetchState.status === 'pending' || prefetchState.status === 'error'}
+		>
+			<div class="pokemon-id-badge">
+				#{String(pokemon.id).padStart(3, '0')}
+			</div>
+			<div class="img-wrapper">
+				<img
+					src={pokemon.sprite}
+					alt="Sprite of {pokemon.name}"
+					loading="lazy"
+					onerror={handleImageError}
+				/>
+			</div>
+			<h2 style="color: {primaryColor};">{pokemon.name}</h2>
+			<div class="types">
+				{#each pokemon.types as type}
+					<span class="type-badge type-{type}">{type}</span>
+				{/each}
+			</div>
+			<div class="stats">
+				{#each pokemon.stats as stat}
+					<div class="stat-row">
+						<span>{stat.name}</span>
+						<span>{stat.base_stat}</span>
+					</div>
+				{/each}
+			</div>
 		</div>
-		<div class="img-wrapper">
-			<img
-				src={pokemon.sprite}
-				alt="Sprite of {pokemon.name}"
-				loading="lazy"
-				on:error={handleImageError}
-			/>
-		</div>
-		<h2 style="color: {primaryColor};">{pokemon.name}</h2>
-		<div class="types">
-			{#each pokemon.types as type}
-				<span class="type-badge type-{type}">{type}</span>
-			{/each}
-		</div>
-		<div class="stats">
-			{#each pokemon.stats as stat}
-				<div class="stat-row">
-					<span>{stat.name}</span>
-					<span>{stat.base_stat}</span>
-				</div>
-			{/each}
-		</div>
+		<!-- End card-content -->
+
+		<!-- Loading/Error Overlay -->
+		{#if prefetchState.status === 'pending' || prefetchState.status === 'error'}
+			<div class="prefetch-overlay">
+				{#if prefetchState.status === 'pending'}
+					<div class="spinner" title="Loading details..."></div>
+				{:else if prefetchState.status === 'error'}
+					<div
+						class="error-indicator"
+						title="Failed to load details: {prefetchState.error || 'Unknown error'}"
+					>
+						!
+					</div>
+					<!-- Optional: Display error message text -->
+					<!-- <p class="error-text">Error loading</p> -->
+				{/if}
+			</div>
+		{/if}
 	</div>
 </a>
 
 <style>
 	/* Reset anchor default styles */
+	.card-link {
+		text-decoration: none;
+		color: inherit;
+		display: block;
+		height: 100%;
+	}
+
+	.pokemon-card {
+		/* ... (Keep existing card styles) ... */
+		background-color: #fff;
+		border-radius: 10px;
+		border: 4px solid #ccc;
+		padding: 20px 15px 15px 15px;
+		text-align: center;
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease;
+		/* Position relative needed for overlay */
+		position: relative;
+		overflow: hidden; /* Hide spinner overflow if needed */
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+	}
+
+	.card-content {
+		/* Make content transition smoothly */
+		transition:
+			opacity 0.3s ease,
+			filter 0.3s ease;
+	}
+
+	.card-content.overlay-active {
+		opacity: 0.6; /* Dim content when overlay is shown */
+		filter: blur(1px); /* Optional blur effect */
+	}
+
+	/* --- Existing card inner styles --- */
+	.pokemon-id-badge {
+		position: absolute;
+		top: -12px;
+		right: 10px;
+		background-color: rgba(0, 0, 0, 0.6);
+		color: white;
+		font-size: 0.8rem;
+		font-weight: bold;
+		padding: 3px 8px;
+		border-radius: 10px;
+		z-index: 2; /* Above overlay bg, below content */
+	}
+	.img-wrapper {
+		width: 120px;
+		height: 120px;
+		background-color: #f1f1f1;
+		border-radius: 50%;
+		margin: 15px auto 10px auto;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		overflow: hidden;
+	}
+	.img-wrapper img {
+		width: 90%;
+		height: 90%;
+		object-fit: contain;
+		image-rendering: pixelated; /* ... */
+	}
+	h2 {
+		margin-block: 10px 15px;
+		font-size: 1.5rem;
+		font-weight: 600;
+		text-transform: capitalize;
+		color: #333;
+		flex-shrink: 0;
+	}
+	.types {
+		margin-bottom: 20px;
+		display: flex;
+		justify-content: center;
+		gap: 8px;
+		flex-wrap: wrap;
+		flex-shrink: 0;
+	}
+	.type-badge {
+		display: inline-block;
+		padding: 4px 14px;
+		border-radius: 15px;
+		font-size: 0.75rem;
+		color: #fff;
+		text-transform: uppercase;
+		font-weight: bold; /* ... */
+	}
+	.stats {
+		font-size: 0.9rem;
+		text-align: left;
+		padding-top: 10px;
+		margin-top: 15px;
+		border-top: 1px dashed #e0e0e0;
+		flex-grow: 1;
+	}
+	.stat-row {
+		display: flex;
+		justify-content: space-between;
+		margin-bottom: 6px;
+		padding-inline: 5px;
+	}
+	.stat-row span:first-child {
+		color: #555;
+		font-weight: 500;
+	}
+	.stat-row span:last-child {
+		color: #222;
+		font-weight: 600;
+	}
+
+	/* --- NEW Prefetch Overlay Styles --- */
+	.prefetch-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(255, 255, 255, 0.5); /* Semi-transparent white overlay */
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 3; /* Above dimmed content */
+		pointer-events: none; /* Allow clicks to go through to the link */
+		border-radius: 10px; /* Match card rounding */
+	}
+
+	.spinner {
+		border: 4px solid rgba(0, 0, 0, 0.1);
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		border-left-color: var(--pokemon-color, #3b4cca); /* Use pokemon color or default */
+		animation: spin 1s ease infinite;
+	}
+
+	@keyframes spin {
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
+	}
+
+	.error-indicator {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		background-color: #e53e3e; /* Red background */
+		color: white;
+		font-size: 1.8rem;
+		font-weight: bold;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		line-height: 1; /* Adjust line height for '!' */
+		cursor: help; /* Indicate tooltip on hover */
+	}
+	/* Optional text - might clutter card
+    .error-text {
+        margin-top: 5px;
+        font-size: 0.8em;
+        color: #e53e3e;
+        font-weight: bold;
+    }
+    */
+
 	.card-link {
 		text-decoration: none;
 		color: inherit; /* Inherit color from parent */

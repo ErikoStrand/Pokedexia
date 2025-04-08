@@ -2,15 +2,24 @@
 import { writable } from 'svelte/store';
 
 /**
- * Stores detailed Pokémon data prefetched on the client.
+ * @typedef {'idle' | 'pending' | 'success' | 'error'} PrefetchStatus
+ */
+
+/**
+ * @typedef {{ status: PrefetchStatus, data?: object, error?: string }} PokemonPrefetchState
+ */
+
+/**
+ * Stores detailed Pokémon data and status prefetched on the client.
  * Key: pokemon name (lowercase string)
- * Value: pokemon detail object
- * @type {import('svelte/store').Writable<Map<string, object>>}
+ * Value: PokemonPrefetchState object
+ * @type {import('svelte/store').Writable<Map<string, PokemonPrefetchState>>}
  */
 export const prefetchedPokemon = writable(new Map());
 
 /**
- * Stores the set of Pokémon names currently being prefetched.
+ * Stores the set of Pokémon names currently being prefetched
+ * (still useful for a quick check in triggerPrefetch).
  * @type {import('svelte/store').Writable<Set<string>>}
  */
 export const pendingPrefetches = writable(new Set());
@@ -21,6 +30,6 @@ export const pendingPrefetches = writable(new Set());
  * @type {import('svelte/store').Writable<{generation: string, type: string}>}
  */
 export const pokedexFilters = writable({
-	generation: 'all', // Default value
-	type: 'all' // Default value
+	generation: 'all',
+	type: 'all'
 });

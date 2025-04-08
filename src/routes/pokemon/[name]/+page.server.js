@@ -1,62 +1,11 @@
 // src/routes/pokemon/[name]/+page.server.js
 import { error } from '@sveltejs/kit';
-import { getCacheEntry, saveCacheEntry } from '$lib/server/database';
-import { typeColors } from '$lib/pokemonUtils'; // Adjust path if needed
+// Import getCacheEntry, saveCacheEntry, AND clearCacheEntry
+import { getCacheEntry, saveCacheEntry, clearCacheEntry } from '$lib/server/database';
+// Import the processor
+import { getAndProcessPokemonData } from '$lib/server/pokemonProcessor';
 
-const API_BASE_URL = 'https://pokeapi.co/api/v2/';
 const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-// --- Reusable Data Processing Logic ---
-// (This could be moved to a shared utils file if preferred)
-async function getAndProcessPokemonData(name, fetchFn) {
-	console.log(`[page.server/${name}] Processing data...`);
-	const pokeResponse = await fetchFn(`${API_BASE_URL}pokemon/${name}`);
-	if (!pokeResponse.ok) {
-		if (pokeResponse.status === 404) throw error(404, `Pokemon "${name}" not found`);
-		throw error(pokeResponse.status, `API Error (${pokeResponse.status})`);
-	}
-	const pokeData = await pokeResponse.json();
-	let speciesData = null;
-	try {
-		if (pokeData.species?.url) {
-			const speciesResponse = await fetchFn(pokeData.species.url);
-			if (speciesResponse.ok) speciesData = await speciesResponse.json();
-		}
-	} catch {
-		/* Ignore species fetch errors */
-	}
-	const flavorTextEntry = speciesData?.flavor_text_entries?.find((e) => e.language.name === 'en');
-	const flavorText =
-		flavorTextEntry?.flavor_text.replace(/[\n\f]/g, ' ') || 'No description available.';
-	const primaryType = pokeData.types[0]?.type.name || 'normal';
-	return {
-		id: pokeData.id,
-		name: pokeData.name,
-		sprite:
-			pokeData.sprites.other?.['official-artwork']?.front_default ||
-			pokeData.sprites.front_default ||
-			'/placeholder.png',
-		spriteShiny:
-			pokeData.sprites.other?.['official-artwork']?.front_shiny || pokeData.sprites.front_shiny,
-		spriteHome: pokeData.sprites.other?.home?.front_default,
-		types: pokeData.types.map((t) => t.type.name),
-		primaryType: primaryType,
-		primaryColor: typeColors[primaryType] || '#A8A77A',
-		height: (pokeData.height / 10).toFixed(1),
-		weight: (pokeData.weight / 10).toFixed(1),
-		abilities: pokeData.abilities.map((a) => ({
-			name: a.ability.name.replace('-', ' '),
-			isHidden: a.is_hidden
-		})),
-		stats: pokeData.stats.map((s) => ({
-			name: s.stat.name.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
-			base_stat: s.base_stat
-		})),
-		flavorText: flavorText,
-		genus: speciesData?.genera?.find((g) => g.language.name === 'en')?.genus || ''
-	};
-}
-// --- End Reusable Logic ---
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params, fetch }) {
@@ -67,40 +16,65 @@ export async function load({ params, fetch }) {
 	try {
 		console.log(`[page.server/${pokemonName}] Checking cache...`);
 		const cachedData = getCacheEntry(pokemonName, CACHE_DURATION_MS);
+
+		// Check if we got *anything* back from the cache
 		if (cachedData) {
 			console.log(
-				`%c[page.server/${pokemonName}] Cache hit! Returning cached data.`,
+				`%c[page.server/${pokemonName}] Cache hit! Validating data structure...`,
 				'color: green;'
 			);
-			return {
-				pokemon: cachedData // The cached data is already the structure we need
-			};
+
+			// --- Stricter Validation ---
+			// Check for essential properties, especially the moves array which indicates
+			// the newer cache structure. Add other checks if needed.
+			const isCacheValid =
+				cachedData.id && // Check if essential base data exists
+				Array.isArray(cachedData.levelUpMoves); // Crucially, check if moves array exists
+
+			if (isCacheValid) {
+				console.log(
+					`[page.server/${pokemonName}] Cached data structure is valid. Returning cache.`
+				);
+				return { pokemon: cachedData }; // Return valid, complete cache
+			} else {
+				// If cache exists but is incomplete/invalid (e.g., old format without moves)
+				console.warn(
+					`[page.server/${pokemonName}] Cached data exists but is INCOMPLETE or INVALID (missing moves array?). Clearing and refetching.`
+				);
+				clearCacheEntry(pokemonName); // Clear the bad entry
+				// Do NOT return here. Let execution fall through to fetch fresh data.
+			}
+		} else {
+			console.log(`[page.server/${pokemonName}] Cache miss (no entry found or expired).`);
+			// No cache entry found, proceed to fetch.
 		}
+		// If cachedData was null OR validation failed (and cache was cleared), execution continues below...
 	} catch (dbError) {
 		console.error(`[page.server/${pokemonName}] Error accessing cache:`, dbError);
+		// Don't fail the load, proceed to fetch if DB error occurs
 	}
 
-	// 2. Fetch from PokeAPI if cache missed
+	// 2. Fetch/Process using the processor function if cache missed OR was invalid/cleared
 	console.log(
-		`%c[page.server/${pokemonName}] Cache miss. Fetching from PokeAPI...`,
+		`%c[page.server/${pokemonName}] Cache miss or invalid/outdated. Fetching/processing...`,
 		'color: blue;'
 	);
 	try {
-		// Use the shared processing function
+		// Use the extracted processor function to get complete data
 		const processedData = await getAndProcessPokemonData(pokemonName, fetch);
 
-		// 3. Save to server-side SQLite cache (fire-and-forget)
+		// 3. Save the newly fetched, complete data to the cache
 		console.log(`[page.server/${pokemonName}] Saving fetched data to cache...`);
 		saveCacheEntry(pokemonName, processedData);
 
-		// 4. Return fresh data
-		console.log(`[page.server/${pokemonName}] Returning freshly fetched data.`);
+		// 4. Return the fresh data for the page
+		console.log(`[page.server/${pokemonName}] Returning freshly processed data.`);
 		return {
 			pokemon: processedData
 		};
 	} catch (fetchError) {
 		console.error(`[page.server/${pokemonName}] Failed to load data:`, fetchError);
-		if (fetchError.status) throw fetchError;
-		throw error(500, `Failed to load data for ${params.name}: ${fetchError.message}`);
+		if (fetchError.status) throw fetchError; // Re-throw SvelteKit HTTP errors
+		throw error(500, `Failed to load data for ${params.name}: ${fetchError.message}`); // Throw generic 500 otherwise
 	}
 }
