@@ -46,12 +46,11 @@
 </div>
 
 <style>
-	/* Wrapper to allow positioning context if needed, though sticky works on .controls directly */
 	.controls-wrapper {
-		/* Makes sure sticky positioning calculates relative to viewport correctly */
 		position: sticky;
-		top: 0;
-		z-index: 100;
+		/* Stick below the main header (adjust 60px if header height changes) */
+		top: 60px;
+		z-index: 100; /* Below main header's z-index */
 		background-color: #ffffff; /* Match controls background */
 		padding-block: 10px; /* Add some padding top/bottom for spacing */
 		margin-bottom: 20px; /* Space below the bar */
