@@ -10,7 +10,7 @@
 			<a href="/" class="nav-logo" aria-label="Pokedex Home">Pokédexia</a>
 			<ul>
 				<li><a href="/">Pokédex</a></li>
-				<li><a href="/team-generator">Team Generator</a></li>
+				<!-- Team Generator link removed -->
 				<!-- Add other links here later -->
 			</ul>
 		</nav>
