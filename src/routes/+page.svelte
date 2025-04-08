@@ -1,114 +1,128 @@
 <!-- src/routes/+page.svelte -->
 <script>
-	import PokemonCard from '$lib/components/PokemonCard.svelte'; // Use your correct path
+	import PokemonCard from '$lib/components/PokemonCard.svelte';
+	import FilterNavbar from '$lib/components/FilterNavbar.svelte'; // Import the new component
+	import { triggerPrefetch } from '$lib/client/prefetch';
+	import { pokedexFilters } from '$lib/stores'; // Import the filters store
+	import { beforeNavigate, afterNavigate } from '$app/navigation'; // Import navigation hooks
+	import { browser } from '$app/environment'; // To check for browser env
 
-	// Data comes directly from +page.server.js load function
 	let { data } = $props();
 
-	// State for client-side filtering remains the same
-	let selectedGeneration = $state('all');
-	let selectedType = $state('all');
+	// --- Scroll Position Management ---
+	const SCROLL_STORAGE_KEY = 'pokedexScrollPos';
+	let POKEDEX_PAGE_PATH = '/'; // Or your specific base path if not root
 
-	// Derived value for filtering remains the same
+	beforeNavigate(({ from, to, cancel }) => {
+		// Save scroll position when navigating *away* from the Pokédex list
+		if (browser && from?.route.id === POKEDEX_PAGE_PATH && to?.route.id !== POKEDEX_PAGE_PATH) {
+			console.log(
+				`[beforeNavigate] Saving scroll position from ${from.route.id}: ${window.scrollY}`
+			);
+			sessionStorage.setItem(SCROLL_STORAGE_KEY, window.scrollY.toString());
+		}
+	});
+
+	afterNavigate(({ from, to }) => {
+		// Restore scroll position when navigating *back* to the Pokédex list
+		if (browser && to?.route.id === POKEDEX_PAGE_PATH && from?.route.id !== POKEDEX_PAGE_PATH) {
+			const savedScrollPos = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+			if (savedScrollPos) {
+				const scrollY = parseInt(savedScrollPos, 10);
+				console.log(`[afterNavigate] Restoring scroll position to ${scrollY}`);
+				// Use timeout or rAF to ensure DOM is ready
+				setTimeout(() => {
+					window.scrollTo({ top: scrollY, behavior: 'auto' }); // Use 'auto' for instant jump
+					sessionStorage.removeItem(SCROLL_STORAGE_KEY); // Clean up after restoring
+				}, 0);
+			}
+		}
+	});
+
+	// --- Filtering Logic (now uses the store) ---
+	// No local $state needed for filters
+
+	// Derived value now depends on the EXTERNAL store ($pokedexFilters)
 	let filteredPokemon = $derived(
 		(data.allPokemon || []).filter((pokemon) => {
+			const filters = $pokedexFilters; // Get current store value
 			const generationMatch =
-				selectedGeneration === 'all' || pokemon.generation === selectedGeneration;
-			const typeMatch = selectedType === 'all' || pokemon.types.includes(selectedType);
+				filters.generation === 'all' || pokemon.generation === filters.generation;
+			const typeMatch = filters.type === 'all' || pokemon.types.includes(filters.type);
 			return generationMatch && typeMatch;
 		})
 	);
 
-	function resetFilters() {
-		selectedGeneration = 'all';
-		selectedType = 'all';
-	}
+	// Reset function is now handled within FilterNavbar
 
-	// $effect for filter logging (optional)
+	// Effect for filter logging (optional)
 	$effect(() => {
-		console.log(`Filters updated - Gen: ${selectedGeneration}, Type: ${selectedType}`);
+		console.log(
+			`Filters store updated - Gen: ${$pokedexFilters.generation}, Type: ${$pokedexFilters.type}`
+		);
 	});
 </script>
 
 <svelte:head>
-	<title>SvelteKit Pokédex (DB Cache)</title>
-	<meta name="description" content="A Pokédex built with SvelteKit and SQLite Caching" />
+	<title>SvelteKit Pokédex (Persistent Filters)</title>
+	<meta
+		name="description"
+		content="A Pokédex built with SvelteKit, persistent filters, and scroll restoration"
+	/>
 </svelte:head>
 
 <div class="container">
-	<h1>SvelteKit Pokédex (DB Cache)</h1>
+	<h1>SvelteKit Pokédex</h1>
 
-	<!-- SvelteKit's error page will handle errors thrown from load -->
-	<!-- Display controls and data if data.allPokemon exists -->
 	{#if data.allPokemon}
-		<div class="controls">
-			<div>
-				<label for="generation-filter">Generation:</label>
-				<select id="generation-filter" bind:value={selectedGeneration}>
-					<option value="all">All</option>
-					{#each data.generations as gen}
-						<option value={gen}>
-							{gen.replace('generation-', 'Gen ').toUpperCase()}
-						</option>
-					{/each}
-				</select>
-			</div>
-			<div>
-				<label for="type-filter">Type:</label>
-				<select id="type-filter" bind:value={selectedType}>
-					<option value="all">All</option>
-					{#each data.types as type}
-						<option value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
-					{/each}
-				</select>
-			</div>
-			<button onclick={resetFilters}>Reset</button>
-		</div>
+		<!-- Use the FilterNavbar component -->
+		<FilterNavbar generations={data.generations} types={data.types} />
 
-		{#if filteredPokemon.length === 0 && (selectedGeneration !== 'all' || selectedType !== 'all')}
+		<!-- Pokedex Grid - No sticky controls div needed here anymore -->
+		{#if filteredPokemon.length === 0 && ($pokedexFilters.generation !== 'all' || $pokedexFilters.type !== 'all')}
 			<p class="no-results">No Pokémon match the selected filters.</p>
 		{:else if data.allPokemon.length === 0}
 			<p class="no-results">No Pokémon data available.</p>
-			<!-- If API fetch somehow returned nothing -->
 		{/if}
 
 		<div id="pokedex">
+			<!-- Hover/Focus trigger remains -->
 			{#each filteredPokemon as pokemon (pokemon.id)}
-				<PokemonCard {pokemon} />
+				<div
+					onpointerenter={() => triggerPrefetch(pokemon.name)}
+					onfocusin={() => triggerPrefetch(pokemon.name)}
+				>
+					<PokemonCard {pokemon} />
+				</div>
 			{/each}
 		</div>
 	{:else}
-		<!-- This part should ideally not be reached if load throws errors correctly,
-             but serves as a fallback message if data is unexpectedly missing -->
 		<p class="error-message">Could not load Pokémon data. Please try again later.</p>
 	{/if}
 </div>
 
 <style>
-	/* --- Global/Page Styles (can also go in app.css or +layout.svelte) --- */
+	/* Remove styles related to the old .controls div */
+
 	:global(body) {
-		/* Use :global for body styles from within a component */
 		font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 		background-color: #f0f0f0;
 		color: #333;
 		line-height: 1.6;
-		margin: 0; /* Remove default body margin */
+		margin: 0;
 	}
-
 	.container {
 		max-width: 1200px;
 		margin: 0 auto;
-		padding: 20px;
+		padding: 0 20px 20px 20px; /* Remove top padding, handled by navbar wrapper */
 	}
-
 	h1 {
 		text-align: center;
-		color: #e3350d; /* Pokemon Red */
-		margin-bottom: 20px;
+		color: #e3350d;
+		margin-block: 20px 15px;
 		text-transform: uppercase;
 		letter-spacing: 2px;
 	}
-
 	.error-message {
 		color: red;
 		text-align: center;
@@ -118,7 +132,6 @@
 		border: 1px solid red;
 		border-radius: 5px;
 	}
-
 	.no-results {
 		text-align: center;
 		font-size: 1.1em;
@@ -127,62 +140,10 @@
 		margin-top: 20px;
 	}
 
-	/* Controls Area */
-	.controls {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 15px;
-		margin-bottom: 30px;
-		padding: 15px;
-		background-color: #fff;
-		border-radius: 8px;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-	}
-
-	.controls label {
-		font-weight: bold;
-		margin-right: 5px;
-		color: #555;
-	}
-
-	.controls select,
-	.controls button {
-		padding: 8px 12px;
-		border: 1px solid #ccc;
-		border-radius: 4px;
-		font-size: 1em;
-		cursor: pointer;
-		background-color: #fff;
-		transition: border-color 0.2s ease;
-	}
-
-	.controls select:hover,
-	.controls button:hover {
-		border-color: #aaa;
-	}
-
-	.controls select:focus,
-	.controls button:focus {
-		outline: 2px solid #3b4cca; /* Pokemon Blue outline */
-		border-color: transparent;
-	}
-
-	.controls button {
-		background-color: #ffcb05; /* Pokemon Yellow */
-		color: #3b4cca;
-		font-weight: bold;
-		border: none;
-	}
-	.controls button:hover {
-		background-color: #e6b804;
-	}
-
-	/* Pokédex Grid */
 	#pokedex {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); /* Slightly wider minmax */
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 		gap: 20px;
-		padding: 10px 0;
+		padding-top: 0; /* No extra padding needed */
 	}
 </style>

@@ -1,74 +1,78 @@
 <!-- src/lib/components/PokemonCard.svelte -->
 <script>
-	import { typeColors } from '$lib/pokemonUtils';
+	// ... (keep existing script content: import, props, derived vars, handleImageError)
+	import { typeColors } from '$lib/pokemonUtils'; // Use your correct import path
+
 	let { pokemon } = $props();
-
-	// Get the primary type for styling border/name
-	let primaryType = $derived(pokemon.types[0] || 'normal'); // Default to normal if no type (shouldn't happen)
-	let primaryColor = $derived(typeColors[primaryType] || '#A8A77A'); // Get color hex
-
+	let primaryType = $derived(pokemon.types[0] || 'normal');
+	let primaryColor = $derived(typeColors[primaryType] || '#A8A77A');
 	function handleImageError(event) {
-		console.warn(`Failed to load image: ${event.target.src}. Using placeholder.`);
-		event.target.src = '/placeholder.png'; // Ensure placeholder exists in static/
+		/* ... */
 	}
 </script>
 
-<!-- Use inline style for the dynamic border color -->
-<div class="pokemon-card" style="border-color: {primaryColor};">
-	<!-- ID Badge -->
-	<div class="pokemon-id-badge">
-		#{String(pokemon.id).padStart(3, '0')}
+<!-- Wrap card content in an anchor tag -->
+<a href="/pokemon/{pokemon.name}" class="card-link">
+	<div class="pokemon-card" style="border-color: {primaryColor};">
+		<div class="pokemon-id-badge">
+			#{String(pokemon.id).padStart(3, '0')}
+		</div>
+		<div class="img-wrapper">
+			<img
+				src={pokemon.sprite}
+				alt="Sprite of {pokemon.name}"
+				loading="lazy"
+				on:error={handleImageError}
+			/>
+		</div>
+		<h2 style="color: {primaryColor};">{pokemon.name}</h2>
+		<div class="types">
+			{#each pokemon.types as type}
+				<span class="type-badge type-{type}">{type}</span>
+			{/each}
+		</div>
+		<div class="stats">
+			{#each pokemon.stats as stat}
+				<div class="stat-row">
+					<span>{stat.name}</span>
+					<span>{stat.base_stat}</span>
+				</div>
+			{/each}
+		</div>
 	</div>
-
-	<!-- Image Wrapper for circular background -->
-	<div class="img-wrapper">
-		<img
-			src={pokemon.sprite}
-			alt="Sprite of {pokemon.name}"
-			loading="lazy"
-			onerror={handleImageError}
-		/>
-	</div>
-
-	<!-- Name - Using primary type color like the image examples -->
-	<h2 style="color: {primaryColor};">
-		{pokemon.name}
-		<!-- ID removed from here, now in badge -->
-	</h2>
-
-	<!-- Types -->
-	<div class="types">
-		{#each pokemon.types as type}
-			<span class="type-badge type-{type}">{type}</span>
-		{/each}
-	</div>
-
-	<!-- Stats Section -->
-	<div class="stats">
-		{#each pokemon.stats as stat}
-			<div class="stat-row">
-				<!-- Display the pre-formatted name directly -->
-				<span>{stat.name}</span>
-				<span>{stat.base_stat}</span>
-			</div>
-		{/each}
-	</div>
-</div>
+</a>
 
 <style>
-	/* --- Base Card --- */
+	/* Reset anchor default styles */
+	.card-link {
+		text-decoration: none;
+		color: inherit; /* Inherit color from parent */
+		display: block; /* Make the link take up the block space */
+		height: 100%; /* Make link fill the grid cell height */
+	}
+	.card-link:focus-visible {
+		outline: 2px solid var(--pokemon-color, #3b4cca); /* Accessibility outline */
+		outline-offset: 2px;
+		border-radius: 10px; /* Match card radius */
+	}
+
+	/* --- KEEP ALL PREVIOUS .pokemon-card styles below --- */
 	.pokemon-card {
 		background-color: #fff;
-		border-radius: 10px; /* Rounded corners */
-		border: 4px solid #ccc; /* Default border, color overridden by inline style */
-		padding: 20px 15px 15px 15px; /* More padding top */
+		border-radius: 10px;
+		border: 4px solid #ccc;
+		padding: 20px 15px 15px 15px;
 		text-align: center;
 		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 		transition:
 			transform 0.2s ease,
 			box-shadow 0.2s ease;
-		position: relative; /* Needed for absolute positioning of badge */
-		overflow: visible; /* Allow badge to overlap */
+		position: relative;
+		overflow: visible;
+		height: 100%; /* Ensure card fills the link height */
+		display: flex; /* Use flexbox for better internal alignment */
+		flex-direction: column; /* Stack elements vertically */
+		justify-content: space-between; /* Distribute space */
 	}
 
 	.pokemon-card:hover {
@@ -94,6 +98,7 @@
 	.img-wrapper {
 		width: 120px; /* Size of the circle */
 		height: 120px;
+		border: 3px solid #292929; /* Dark border */
 		background-color: #f1f1f1; /* Light grey background */
 		border-radius: 50%; /* Make it a circle */
 		margin: 15px auto 10px auto; /* Center and space */
